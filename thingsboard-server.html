@@ -1,0 +1,162 @@
+<script type="text/javascript">
+    RED.nodes.registerType('thingsboard-server',{
+        category: 'config',
+        defaults: {
+            thingsboardHost: {value:"localhost",required:true},
+            mqttPort: {value:1883,required:true,validate:RED.validators.number()},
+            wsPort: {value:1880,required:true,validate:RED.validators.number()},
+            restPort: {value:8080,required:true,validate:RED.validators.number()},
+            username: {value:"",required:true},
+            password: {value:"",type:"password",required:true}
+        },
+        label: function() {
+            return this.thingsboardHost+": MQTT "+this.mqttPort + ": WS " + this.wsPort + ": REST " + this.restPort;
+        }
+    });
+
+
+    RED.nodes.registerType('thingsboard-input',{
+        category: 'thingsboard',
+        color: '#a6bbcf',
+        defaults: {
+            deviceTypes: {value:""},
+            deviceNamePattern: {value:""},
+            thingsboardServer: {type:"thingsboard-server", required:true},
+            isListenToTelemetry: {type:"checkbox", value:false},
+            isListenToAttributes: {type:"checkbox", value:false}
+        },
+        inputs:0,
+        outputs:1,
+        icon: "file.png",
+        label: function() {
+            return this.name||"thingsboard-input";
+        }
+    });
+
+
+    RED.nodes.registerType('thingsboard-output',{
+        category: 'thingsboard',
+        color: '#a6bbcf',
+        defaults: {
+            isDeviceInfoFromMsg: {type:"checkbox", value:false},
+            deviceType: {value:""},
+            deviceName: {value:""},
+            thingsboardServer: {type:"thingsboard-server", required:true},
+            isOutputConfigurationFromMsg: { type:"checkbox", value:false},
+            // Overriden if isOutputConfigurationFromMsg is set to true
+            isTelemetryUpdate: { type:"checkbox", value:true},
+            isAttributeUpdate: { type:"checkbox", value:false},
+            isRpcCall: {type:"checkbox", value:false },
+            rpcCallFunction: { value:""} ,
+            isRpcTwoWayCall: { value:""}
+        },
+        inputs:1,
+        outputs:0,
+        icon: "file.png",
+        label: function() {
+            return this.name||"thingsboard-output";
+        }
+    });
+</script>
+
+<script type="text/x-red" data-template-name="thingsboard-server">
+    <div class="form-row">
+        <label for="node-config-input-thingsboardHost"><i class="icon-bookmark"></i>Thingsboard Host</label>
+        <input type="text" id="node-config-input-thingsboardHost">
+    </div>
+    <div class="form-row">
+        <label for="node-config-input-mqttPort"><i class="icon-bookmark"></i>MQTT Port</label>
+        <input type="text" id="node-config-input-mqttPort">
+    </div>
+    <div class="form-row">
+        <label for="node-config-input-wsPort"><i class="icon-bookmark"></i>Websocket Port</label>
+        <input type="text" id="node-config-input-wsPort">
+    </div>
+    <div class="form-row">
+        <label for="node-config-input-restPort"><i class="icon-bookmark"></i>REST Port</label>
+        <input type="text" id="node-config-input-restPort">
+    </div>
+    <div class="form-row">
+        <label for="node-config-input-username"><i class="icon-bookmark"></i>Username</label>
+        <input type="text" id="node-config-input-username">
+    </div>
+    <div class="form-row">
+        <label for="node-config-input-password"><i class="icon-bookmark"></i>Password</label>
+        <input type="text" id="node-config-input-password">
+    </div>
+</script>
+
+
+<script type="text/x-red" data-template-name="thingsboard-input">
+    <div class="form-row">
+        <label for="node-input-thingsboard-thingsboardServer"><i class="fa fa-globe"></i> <span data-i18n="thingsboard.label.broker"></span></label>
+        <input type="text" id="node-input-thingsboardServer">
+    </div>
+    <div class="form-row">
+        <label for="node-input-deviceNamePattern"><i class="icon-tag"></i> Device-Name-Pattern</label>
+        <input type="text" id="node-input-deviceNamePattern" placeholder="Name">
+    </div>
+    <div class="form-row">
+        <label for="node-input-deviceTypes"><i class="icon-tag"></i> Device-Types (Comma separated values)</label>
+        <input type="text" id="node-input-deviceTypes" placeholder="Type">
+    </div>
+    <div class="form-row">
+        <label for="node-input-isListenToTelemetry"><i class="icon-tag"></i> Listen to Telemetry updates</label>
+        <input type="checkbox" id="node-input-isListenToTelemetry">
+    </div>
+    <div class="form-row">
+        <label for="node-input-isListenToAttributes"><i class="icon-tag"></i> Listen to Attribute updates</label>
+        <input type="checkbox" id="node-input-isListenToAttributes">
+    </div>
+</script>
+
+<script type="text/x-red" data-help-name="thingsboard-input">
+    <p>A node that registers for websocket updates from thingsboard</p>
+</script>
+
+<script type="text/x-red" data-template-name="thingsboard-output">
+    <div class="form-row">
+        <label for="node-input-thingsboard-thingsboardServer"><i class="fa fa-globe"></i> <span data-i18n="thingsboard.label.broker"></span></label>
+        <input type="text" id="node-input-thingsboardServer">
+    </div>
+    <div class="form-row">
+        <label for="node-input-isDeviceInfoFromMsg"><i class="icon-tag"></i> Take Device-Id from msg property (msg.deviceId)</label>
+        <input type="checkbox" id="node-input-isDeviceInfoFromMsg">
+    </div>
+    <div class="form-row">
+        <label for="node-input-deviceName"><i class="icon-tag"></i> Device-Name</label>
+        <input type="text" id="node-input-deviceName" placeholder="Name">
+    </div>
+    <div class="form-row">
+        <label for="node-input-deviceType"><i class="icon-tag"></i> Device-Type</label>
+        <input type="text" id="node-input-deviceType" placeholder="Type">
+    </div>
+    <div class="form-row">
+        <label for="node-input-isOutputConfigurationFromMsg"><i class="icon-tag"></i> Take Output-Configuration from msg property (msg.isTelemetryUpdate, msg.isAttributeUpdate, msg.isRpcCall, msg.rpcCallFunction, msg.isRpcTwoWayCall)</label>
+        <input type="checkbox" id="node-input-isOutputConfigurationFromMsg">
+    </div>
+    <div class="form-row">
+        <label for="node-input-isTelemetryUpdate"><i class="icon-tag"></i> Is Telemetry Update</label>
+        <input type="checkbox" id="node-input-isTelemetryUpdate">
+    </div>
+    <div class="form-row">
+        <label for="node-input-isAttributeUpdate"><i class="icon-tag"></i> Is Attribute Update</label>
+        <input type="checkbox" id="node-input-isAttributeUpdate">
+    </div>
+    <div class="form-row">
+        <label for="node-input-isRpcCall"><i class="icon-tag"></i> Is RPC Call</label>
+        <input type="checkbox" id="node-input-isRpcCall">
+    </div>
+    <div class="form-row">
+        <label for="node-input-rpcFunctionName"><i class="icon-tag"></i> RPC Call function name</label>
+        <input type="text" id="node-input-rpcFunctionName" placeholder="getValue">
+    </div>
+    <div class="form-row">
+        <label for="node-input-isRpcTwoWayCall"><i class="icon-tag"></i> Is RPC two way call</label>
+        <input type="checkbox" id="node-input-isRpcTwoWayCall">
+    </div>
+</script>
+
+<script type="text/x-red" data-help-name="thingsboard-output">
+    <p>A node that sends msg.payload to thingsboard</p>
+</script>

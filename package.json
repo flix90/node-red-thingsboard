@@ -1,0 +1,13 @@
+{
+  "name": "nodered-thingsboard",
+  "version": "1.0.0",
+  "description": "Test NodeRed implementation",
+  "author": "Felix Schuppert",
+  "license": "ISC",
+      "node-red" : {
+        "nodes": {
+            "thingsboard-server": "thingsboard-server.js"
+        }
+    }
+
+}
