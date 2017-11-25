@@ -1,7 +1,7 @@
 {
-  "name": "nodered-thingsboard",
+  "name": "node-red-thingsboard",
   "version": "1.0.0",
-  "description": "Test NodeRed implementation",
+  "description": "A node-RED node for Thingsboard connectivity",
   "author": "Felix Schuppert",
   "license": "ISC",
       "node-red" : {

@@ -40,7 +40,7 @@ module.exports = function(RED) {
             //    node.warn(RED._("common.errors.nooverride"));
             //}
 
-            console.log("RequestHttp - url " + url + ", nodeMethod " + nodeMethod + ", msg " + JSON.stringify(msg));
+            RED.log.debug("RequestHttp - url " + url + ", nodeMethod " + nodeMethod + ", msg " + JSON.stringify(msg));
 
             if (!url) {
                 node.error(RED._("thingsboardserver.errors.no-url"),msg);
@@ -174,7 +174,7 @@ module.exports = function(RED) {
                 else { node.warn("Bad proxy url: "+process.env.http_proxy); }
             }
 
-            console.log("RequestHttp - Performing request - url " + url + ", nodeMethod " + nodeMethod + ", msg " + JSON.stringify(msg));
+            RED.log.debug("RequestHttp - Performing request - url " + url + ", nodeMethod " + nodeMethod + ", msg " + JSON.stringify(msg));
 
             var req = ((/^https/.test(urltotest))?https:http).request(opts,function(res) {
                 // Force NodeJs to return a Buffer (instead of a string)
@@ -203,7 +203,7 @@ module.exports = function(RED) {
                 msg.headers['x-node-red-request-node'] = hashSum(msg.headers);
                 // msg.url = url;   // revert when warning above finally removed
                 res.on('data',function(chunk) {
-                	console.log("RequestHttp - data received");
+                	RED.log.debug("RequestHttp - data received");
                     if (!Buffer.isBuffer(chunk)) {
                         // if the 'setEncoding(null)' fix above stops working in
                         // a new Node.js release, throw a noisy error so we know
@@ -213,14 +213,14 @@ module.exports = function(RED) {
                     msg.payload.push(chunk);
                 });
                 res.on('end',function() {
-                    if (node.metric()) {
+                    if (RED.log.debug()) {
                         // Calculate request time
                         var diff = process.hrtime(preRequestTimestamp);
                         var ms = diff[0] * 1e3 + diff[1] * 1e-6;
                         var metricRequestDurationMillis = ms.toFixed(3);
-                        node.metric("duration.millis", msg, metricRequestDurationMillis);
+                        RED.log.debug("duration.millis", msg, metricRequestDurationMillis);
                         if (res.client && res.client.bytesRead) {
-                            node.metric("size.bytes", msg, res.client.bytesRead);
+                            RED.log.debug("size.bytes", msg, res.client.bytesRead);
                         }
                     }
 
@@ -239,7 +239,7 @@ module.exports = function(RED) {
                                 catch(e) { node.warn(RED._("thingsboardserver.errors.json-error")); }
                             }
                         }
-                        console.log("RequestHttp - Receiving result " + JSON.stringify(msg));
+                        RED.log.debug("RequestHttp - Receiving result " + JSON.stringify(msg));
 
                         onResult(msg);
                         // node.send(msg);
@@ -255,7 +255,7 @@ module.exports = function(RED) {
                 req.abort();
             });
             req.on('error',function(err) {
-            	console.log("RequestHttp - Error received " + err.toString());
+            	RED.log.debug("RequestHttp - Error received " + err.toString());
                 node.error(err,msg);
                 msg.payload = err.toString() + " : " + url;
                 msg.statusCode = err.code;
@@ -267,7 +267,7 @@ module.exports = function(RED) {
             }
             req.end();
 
-            console.log("RequestHttp - Request performed, waiting for response");
+            RED.log.debug("RequestHttp - Request performed, waiting for response");
 
             return msg;
         }
@@ -291,13 +291,13 @@ module.exports = function(RED) {
 
 	        	var res = node.requestHttp(node.thingsboardHost + ":" + node.restPort + "/api/auth/login", "POST", msg, function(msg) {
 
-		        	console.log("Authenticate result " + JSON.stringify(res));
+		        	RED.log.debug("Authenticate result " + JSON.stringify(res));
 		        	node.thingsboardBearerToken = res.payload.token;
 
 		        	// Get user from bearer token
 		        	var msg = node.setAuthTokenHeader({});
 		        	res = node.requestHttp(node.thingsboardHost + ":" + node.restPort + "/api/auth/user", "GET", msg, function (msg) {
-			        	console.log("User result " + JSON.stringify(res.payload));
+			        	RED.log.debug("User result " + JSON.stringify(res.payload));
 			        	node.thingsboardUser = res.payload;
 			        	node.isAuthenticated = res.payload !== undefined;
 			        	onResult();
@@ -315,7 +315,7 @@ module.exports = function(RED) {
 
         this.startListenWsForAssets = function(assetsToListen) {
 
-        		console.log("WS - startListenWsForAssets for " + JSON.stringify(assetsToListen));
+        		RED.log.debug("WS - startListenWsForAssets for " + JSON.stringify(assetsToListen));
 		    	node.closing = false;
 		    	// Store cmd ids
 		    	for (var i = 0; i < assetsToListen.length; i++) {
@@ -371,7 +371,7 @@ module.exports = function(RED) {
 		                }
 		            }
 
-			    	console.log("WS - sending to server " + JSON.stringify(msg));
+			    	RED.log.debug("WS - sending to server " + JSON.stringify(msg));
 
 			    	node.server.send(payload);
 		    	}); // start outbound connection
@@ -518,11 +518,11 @@ module.exports = function(RED) {
 
         function handleConnection(/*socket*/socket, onOpened) {
 
-			console.log("WS - handling connection for socket " + JSON.stringify(socket));
+			RED.log.debug("WS - handling connection for socket " + JSON.stringify(socket));
             var id = (1+Math.random()*4294967295).toString(16);
 
             socket.on('open',function() {
-            	console.log("WS - opened connection ");
+            	RED.log.debug("WS - opened connection ");
                 node.isWsConnected = true;
                 node.emit('opened','');
                 if (onOpened !== undefined)
@@ -540,12 +540,12 @@ module.exports = function(RED) {
                 }
             });
             socket.on('message',function(data,flags) {
-            	console.log("WS - Received message " + data);
+            	RED.log.debug("WS - Received message " + data);
 
                 node.handleEvent(id,socket,'message',data,flags);
             });
             socket.on('error', function(err) {
-            	console.log("WS - errored connection with " + err);
+            	RED.log.debug("WS - errored connection with " + err);
                 node.emit('erro');
                 node.isWsConnected = false;
                 if (!node.closing) {
@@ -581,13 +581,13 @@ module.exports = function(RED) {
         var msg = {
             payload:JSON.parse(data)
         };
-        console.log("WSClient - HandleEvent for " + JSON.stringify(msg));
+        RED.log.debug("WSClient - HandleEvent for " + JSON.stringify(msg));
         msg._session = {type:"websocket",id:id};
 
     	// Add subscription device details to msg
     	if (msg.payload !== undefined && msg.payload.subscriptionId !== undefined)
     	{
-    		console.log("HandleEvent -  Subscriptions " + JSON.stringify(this._subscriptions));
+    		RED.log.debug("HandleEvent -  Subscriptions " + JSON.stringify(this._subscriptions));
     		var subs = this._subscriptions[msg.payload.subscriptionId];
     		if (subs !== undefined)
     		{
@@ -625,7 +625,7 @@ module.exports = function(RED) {
 
         var node = this;
 
-        console.log("InputNode - deviceTypes " + node.deviceTypes + ", deviceNamePattern " + node.deviceNamePattern);
+        RED.log.debug("InputNode - deviceTypes " + node.deviceTypes + ", deviceNamePattern " + node.deviceNamePattern);
 
         if (node.deviceTypes !== undefined && node.deviceNamePattern !== undefined)
         {
@@ -654,7 +654,7 @@ module.exports = function(RED) {
 
 		        node.serverConfig.startListenWsForAssets(
 		        	assets, function(msg) {
-		        		console.log("LATEST_TELEMETRY received " + JSON.stringify(msg));
+		        		RED.log.debug("LATEST_TELEMETRY received " + JSON.stringify(msg));
 		        	});
 
 		        node.on('close', function() {
@@ -713,7 +713,7 @@ module.exports = function(RED) {
         		isRpcTwoWayCall = msg.isRpcTwoWayCall;
         	}
 
-        	console.log("REST - sending msg " + JSON.stringify(msg));
+        	RED.log.debug("REST - sending msg " + JSON.stringify(msg));
         	// Now use http api to send device updates
         	/*if (node.deviceAccessToken === undefined)
         	{*/
@@ -723,13 +723,13 @@ module.exports = function(RED) {
 		       	if (isTelemetryUpdate)
 		       	{
 			       	node.serverConfig.requestHttp(node.serverConfig.thingsboardHost + ":" + node.serverConfig.restPort + "/api/v1/" + deviceAccessToken + "/telemetry", "POST", msg, function(res) {
-				       	console.log("Publish result " + JSON.stringify(res));
+				       	RED.log.debug("Publish result " + JSON.stringify(res));
 			       	}, false); // No payload in response expected
 		       	}
 		       	else if (isAttributeUpdate)
 		       	{
 			       	node.serverConfig.requestHttp(node.serverConfig.thingsboardHost + ":" + node.serverConfig.restPort + "/api/v1/" + deviceAccessToken + "/attributes", "POST", msg, function(res) {
-				       	console.log("Publish result " + JSON.stringify(res));
+				       	RED.log.debug("Publish result " + JSON.stringify(res));
 			       	}, false); // No payload in response expected
 		       	}
 		       	else if (isRpcCall)
@@ -739,7 +739,7 @@ module.exports = function(RED) {
 					//--header "X-Authorization: $JWT_TOKEN"
 					var wayBinding = isRpcTwoWayCall ? "twoway" : "oneway";
 			       	node.serverConfig.requestHttp(node.serverConfig.thingsboardHost + ":" + node.serverConfig.restPort + "/api/plugins/rpc/" + wayBinding + "/" + deviceId, "POST", msg, function(res) {
-				       	console.log("RPC call result " + JSON.stringify(res));
+				       	RED.log.debug("RPC call result " + JSON.stringify(res));
 			       	}, false); // No payload in response expected
 		       	}
 			};
@@ -752,7 +752,7 @@ module.exports = function(RED) {
 	        		node.serverConfig.setAuthTokenHeader(subMsg);
 					node.serverConfig.requestHttp(node.serverConfig.thingsboardHost + ":" + node.serverConfig.restPort + "/api/device/" + deviceId + "/credentials", "GET", subMsg, function(res) {
 
-			        	console.log("Device accessToken result " + JSON.stringify(res));
+			        	RED.log.debug("Device accessToken result " + JSON.stringify(res));
 			        	node.deviceAccessToken[deviceId] = res.payload.credentialsId;
 
 			        	sendPostData(node.deviceAccessToken[deviceId], deviceId, msg);
@@ -795,7 +795,7 @@ module.exports = function(RED) {
         	{
 	        	node.serverConfig.setAuthTokenHeader(msg);
 	        	node.serverConfig.requestHttp(node.serverConfig.thingsboardHost + ":" + node.serverConfig.restPort + "/api/v1/" + node.deviceAccessToken + "/telemetry", "POST", msg, function(res) {
-			        	console.log("Publish result " + JSON.stringify(res));
+			        	RED.log.debug("Publish result " + JSON.stringify(res));
 		        	});
         	}*/
 
