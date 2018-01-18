@@ -177,96 +177,42 @@ module.exports = function(RED) {
 
             RED.log.debug("RequestHttp - Performing request - url " + url + ", nodeMethod " + nodeMethod + ", msg " + JSON.stringify(msg));
 
-            var req = request(opts,function(res) {
-                // Force NodeJs to return a Buffer (instead of a string)
-                // See https://github.com/nodejs/node/issues/6038
-                res.setEncoding(null);
-                delete res._readableState.decoder;
+            opts.body = payload;
 
-                msg.statusCode = res.statusCode;
-                msg.headers = res.headers;
-                msg.responseUrl = res.responseUrl;
-                msg.payload = [];
+            request(opts,function(error, res, body) {
+                node.status({});
+                if (error) {
+                  if (error.code === 'ETIMEDOUT') {
+                    node.error(RED._("common.notification.errors.no-response"), msg);
+                    setTimeout(function () {
+                      node.status({
+                        fill: "red",
+                        shape: "ring",
+                        text: "common.notification.errors.no-response"
+                      });
+                    }, 10);
+                  } else {
+                    node.error(error, msg);
+                    msg.payload = error.toString() + " : " + url;
+                    msg.statusCode = error.code;
+                    node.send(msg);
+                    node.status({
+                      fill: "red",
+                      shape: "ring",
+                      text: error.code
+                    });
+                  }
+                } else {
 
-                if (msg.headers.hasOwnProperty('set-cookie')) {
-                    msg.responseCookies = {};
-                    msg.headers['set-cookie'].forEach(function(c) {
-                        var parsedCookie = cookie.parse(c);
-                        var eq_idx = c.indexOf('=');
-                        var key = c.substr(0, eq_idx).trim()
-                        parsedCookie.value = parsedCookie[key];
-                        delete parsedCookie[key];
-                        msg.responseCookies[key] = parsedCookie;
+                    msg.payload = body;
 
-                    })
+                    try { msg.payload = JSON.parse(msg.payload); } // obj
+                    catch(e) { node.warn(RED._("thingsboardserver.errors.json-error")); }
 
+                    RED.log.debug("RequestHttp - Receiving result " + JSON.stringify(msg));
+                    onResult(msg);
                 }
-                msg.headers['x-node-red-request-node'] = hashSum(msg.headers);
-                // msg.url = url;   // revert when warning above finally removed
-                res.on('data',function(chunk) {
-                	RED.log.debug("RequestHttp - data received");
-                    if (!Buffer.isBuffer(chunk)) {
-                        // if the 'setEncoding(null)' fix above stops working in
-                        // a new Node.js release, throw a noisy error so we know
-                        // about it.
-                        throw new Error("HTTP Request data chunk not a Buffer");
-                    }
-                    msg.payload.push(chunk);
-                });
-                res.on('end',function() {
-                    if (1 == 2) {
-                        // Calculate request time
-                        var diff = process.hrtime(preRequestTimestamp);
-                        var ms = diff[0] * 1e3 + diff[1] * 1e-6;
-                        var metricRequestDurationMillis = ms.toFixed(3);
-                        RED.log.debug("duration.millis", msg, metricRequestDurationMillis);
-                        if (res.client && res.client.bytesRead) {
-                            RED.log.debug("size.bytes", msg, res.client.bytesRead);
-                        }
-                    }
-
-                    // Check that msg.payload is an array - if the req error
-                    // handler has been called, it will have been set to a string
-                    // and the error already handled - so no further action should
-                    // be taken. #1344
-                    if (Array.isArray(msg.payload)) {
-                        // Convert the payload to the required return type
-                        msg.payload = Buffer.concat(msg.payload); // bin
-                        if (node.ret !== "bin") {
-                            msg.payload = msg.payload.toString('utf8'); // txt
-
-                            if (node.ret === "obj" && isResultPayloadExpected) {
-                                try { msg.payload = JSON.parse(msg.payload); } // obj
-                                catch(e) { node.warn(RED._("thingsboardserver.errors.json-error")); }
-                            }
-                        }
-                        RED.log.debug("RequestHttp - Receiving result " + JSON.stringify(msg));
-
-                        onResult(msg);
-                        // node.send(msg);
-                        // node.status({});
-                    }
-                });
             });
-            req.setTimeout(node.reqTimeout, function() {
-                node.error(RED._("common.notification.errors.no-response"),msg);
-                setTimeout(function() {
-                    node.status({fill:"red",shape:"ring",text:"common.notification.errors.no-response"});
-                },10);
-                req.abort();
-            });
-            req.on('error',function(err) {
-            	RED.log.debug("RequestHttp - Error received " + err.toString());
-                node.error(err,msg);
-                msg.payload = err.toString() + " : " + url;
-                msg.statusCode = err.code;
-                node.send(msg);
-                node.status({fill:"red",shape:"ring",text:err.code});
-            });
-            if (payload) {
-                req.write(payload);
-            }
-            req.end();
 
             RED.log.debug("RequestHttp - Request performed, waiting for response");
 
