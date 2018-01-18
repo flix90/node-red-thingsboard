@@ -175,8 +175,9 @@ module.exports = function(RED) {
                 else { node.warn("Bad proxy url: "+process.env.http_proxy); }
             }
 
-            RED.log.debug("RequestHttp - Performing request - url " + url + ", nodeMethod " + nodeMethod + ", msg " + JSON.stringify(msg));
+            RED.log.info("RequestHttp - Performing request - url " + url + ", nodeMethod " + nodeMethod + ", msg " + JSON.stringify(msg));
 
+            opts.url = url;
             opts.body = payload;
 
             request(opts,function(error, res, body) {
