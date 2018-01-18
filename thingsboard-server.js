@@ -4,14 +4,15 @@ module.exports = function(RED) {
 	    "use strict";
 	    var ws = require("ws");
 	    var urllib = require("url");
-	    var http = require("follow-redirects").http;
-	    var https = require("follow-redirects").https;
+
+        var request = require('request');
     	var hashSum = require("hash-sum");
 
         RED.nodes.createNode(this,n);
 
         this._inputNodes = [];
         this._subscriptions = [];
+        this._pendingWsRequests = [];
 
         this.thingsboardHost = n.thingsboardHost;
         this.mqttPort = n.mqttPort;
@@ -176,7 +177,7 @@ module.exports = function(RED) {
 
             RED.log.debug("RequestHttp - Performing request - url " + url + ", nodeMethod " + nodeMethod + ", msg " + JSON.stringify(msg));
 
-            var req = ((/^https/.test(urltotest))?https:http).request(opts,function(res) {
+            var req = request(opts,function(res) {
                 // Force NodeJs to return a Buffer (instead of a string)
                 // See https://github.com/nodejs/node/issues/6038
                 res.setEncoding(null);
@@ -213,7 +214,7 @@ module.exports = function(RED) {
                     msg.payload.push(chunk);
                 });
                 res.on('end',function() {
-                    if (RED.log.debug()) {
+                    if (1 == 2) {
                         // Calculate request time
                         var diff = process.hrtime(preRequestTimestamp);
                         var ms = diff[0] * 1e3 + diff[1] * 1e-6;
@@ -379,74 +380,153 @@ module.exports = function(RED) {
 
         this.getDeviceIdByName = function (deviceName, deviceType, onDeviceResult) {
 
-        	node.authenticate(function() {
-	        	 var query = {
-	        	 	"deviceTypes": [
-	        	 		deviceType
-	        	 	],
-				 	"parameters": {
-				    	"rootId": node.thingsboardUser.tenantId.id,
-				    	"rootType": "TENANT",
-				    	"direction": "FROM",
-				    	"maxLevel": 100
-				  	}
-				};
+            node.authenticate(function() {
+                 var query = {
+                    "deviceTypes": [
+                        deviceType
+                    ],
+                    "parameters": {
+                        "rootId": node.thingsboardUser.tenantId.id,
+                        "rootType": "TENANT",
+                        "direction": "FROM",
+                        "maxLevel": 100
+                    }
+                };
 
-				var msg = {
-					payload: query
-				};
+                var msg = {
+                    payload: query
+                };
 
-				node.setAuthTokenHeader(msg);
+                node.setAuthTokenHeader(msg);
 
-				node.requestHttp(node.thingsboardHost + ":" + node.restPort + "/api/devices", "POST", msg, function(res) {
-					var deviceId;
-					for (var i = 0; i < res.payload.length; i++) {
-						if (res.payload[i].name == deviceName)
-							{
-								deviceId = res.payload[i].id.id;
-							}
-					}
+                node.requestHttp(node.thingsboardHost + ":" + node.restPort + "/api/devices", "POST", msg, function(res) {
+                    var deviceId;
+                    for (var i = 0; i < res.payload.length; i++) {
+                        if (res.payload[i].name == deviceName)
+                            {
+                                deviceId = res.payload[i].id.id;
+                            }
+                    }
 
-	        		onDeviceResult([deviceId]);
-				});
-        	});
+                    onDeviceResult([deviceId]);
+                });
+            });
         }
 
-        this.getDeviceIdsByNamePattern = function (deviceNamePattern, deviceTypes, onDeviceResult) {
+        this.getAssetIdByName = function (assetName, assetType, onAssetResult) {
 
-        	node.authenticate(function() {
-	        	 var query = {
-	        	 	"deviceTypes": deviceTypes,
-				 	"parameters": {
-				    	"rootId": node.thingsboardUser.tenantId.id,
-				    	"rootType": "TENANT",
-				    	"direction": "FROM",
-				    	"maxLevel": 100
-				  	},
-				};
+            node.authenticate(function() {
+                 var query = {
+                    "assetTypes": [
+                        assetType
+                    ],
+                    "parameters": {
+                        "rootId": node.thingsboardUser.tenantId.id,
+                        "rootType": "TENANT",
+                        "direction": "FROM",
+                        "maxLevel": 100
+                    }
+                };
 
-				var msg = {
-					payload: query
-				};
+                var msg = {
+                    payload: query
+                };
 
-				node.setAuthTokenHeader(msg);
+                node.setAuthTokenHeader(msg);
 
-				node.requestHttp(node.thingsboardHost + ":" + node.restPort + "/api/devices", "POST", msg, function(res) {
-					var re = new RegExp(deviceNamePattern);
+                node.requestHttp(node.thingsboardHost + ":" + node.restPort + "/api/assets", "POST", msg, function(res) {
+                    var assetId;
+                    for (var i = 0; i < res.payload.length; i++) {
+                        if (res.payload[i].name == assetName)
+                            {
+                                assetId = res.payload[i].id.id;
+                            }
+                    }
 
-					var deviceIds = [];
-					for (var i = 0; i < res.payload.length; i++) {
-						if (re.test(res.payload[i].name))
-							{
-								deviceIds[deviceIds.length] = res.payload[i].id.id;
-							}
-					}
-
-	        		onDeviceResult(deviceIds);
-				});
-        	});
+                    onDeviceResult([assetId]);
+                });
+            });
         }
 
+        this.getDevicesByNamePattern = function (deviceNamePattern, deviceTypes, onDeviceResult) {
+
+            node.authenticate(function() {
+                 var query = {
+                    "deviceTypes": deviceTypes,
+                    "parameters": {
+                        "rootId": node.thingsboardUser.tenantId.id,
+                        "rootType": "TENANT",
+                        "direction": "FROM",
+                        "maxLevel": 100
+                    }
+                };
+
+                var msg = {
+                    payload: query
+                };
+
+                node.setAuthTokenHeader(msg);
+
+                node.requestHttp(node.thingsboardHost + ":" + node.restPort + "/api/devices", "POST", msg, function(res) {
+                    var re = new RegExp(deviceNamePattern);
+
+                    var devices = [];
+                    for (var i = 0; i < res.payload.length; i++) {
+                        if (re.test(res.payload[i].name))
+                            {
+                                devices[devices.length] = {
+                                    id:res.payload[i].id.id,
+                                    entityType:res.payload[i].id.entityType
+                                };
+                            }
+                    }
+
+                    onDeviceResult(devices);
+                });
+            });
+        }
+
+        this.getAssetsByNamePattern = function (assetNamePattern, assetTypes, onAssetResult) {
+
+            node.authenticate(function() {
+                 var query = {
+                    "assetTypes": assetTypes,
+                    "parameters": {
+                        "rootId": node.thingsboardUser.tenantId.id,
+                        "rootType": "TENANT",
+                        "direction": "FROM",
+                        "maxLevel": 100
+                    }
+                };
+
+                var msg = {
+                    payload: query
+                };
+
+                RED.log.debug("Getting assets by name pattern " + JSON.stringify(msg));
+
+                node.setAuthTokenHeader(msg);
+
+                node.requestHttp(node.thingsboardHost + ":" + node.restPort + "/api/assets", "POST", msg, function(res) {
+                    var re = new RegExp(assetNamePattern);
+
+                    var assets = [];
+                    for (var i = 0; i < res.payload.length; i++) {
+                        if (re.test(res.payload[i].name))
+                            {
+                                assets[assets.length] =  {
+                                    id:res.payload[i].id.id,
+                                    entityType:res.payload[i].id.entityType
+                                };
+                            }
+                    }
+
+                    onAssetResult(assets);
+                });
+            });
+        }
+
+        this.cmdId = 1;
         this.createAssetToListenWs = function (entityId, entityType, scope)
         {
         	/*
@@ -479,12 +559,12 @@ module.exports = function(RED) {
                     entityId: datasourceSubscription.entityId,
                     keys: attrKeys
                 };*/
-
+                this.cmdId++;
         	return {
-                entityType: "DEVICE", //"DEVICE",
+                entityType: entityType, //"DEVICE",
                 entityId: entityId, //"6f347950-c16f-11e7-b08a-f14a0b77c636",  
                 scope: scope, //"LATEST_TELEMETRY",
-                cmdId: 10
+                cmdId: this.cmdId
         	};
         }
 
@@ -500,23 +580,33 @@ module.exports = function(RED) {
         }
 
         function startconn(onOpened) {    // Connect to remote endpoint
-        	if (!node.isWsConnected)
+            if (onOpened !== undefined)
+            {
+                node._pendingWsRequests.push({
+                    callback:onOpened
+                });
+            }
+        	if (!node.isWsConnected && !node.isWsOpening)
         	{
 	            node.tout = null;
 	            var path = "ws://" + node.thingsboardHost + ":" + node.wsPort + "/api/ws/plugins/telemetry?token=" + node.thingsboardBearerToken;
 	            var socket = new ws(path);
 	            socket.setMaxListeners(0);
 	            node.server = socket; // keep for closing
-	            handleConnection(socket, onOpened);
+	            handleConnection(socket);
         	}
-        	else
+            else if (!node.isWsConnected && node.isOpening)
+            {
+                // Will be catched by queue
+            }
+        	else if (!node.isClosing)
         	{
         		if (onOpened !== undefined)
         			onOpened();
         	}
         }
 
-        function handleConnection(/*socket*/socket, onOpened) {
+        function handleConnection(/*socket*/socket) {
 
 			RED.log.debug("WS - handling connection for socket " + JSON.stringify(socket));
             var id = (1+Math.random()*4294967295).toString(16);
@@ -525,10 +615,16 @@ module.exports = function(RED) {
             	RED.log.debug("WS - opened connection ");
                 node.isWsConnected = true;
                 node.emit('opened','');
-                if (onOpened !== undefined)
-                	onOpened();
+
+                // Iterate over pending requests
+                for (var i = 0; i < node._pendingWsRequests.length; i++) {
+                    var callback = node._pendingWsRequests[i];
+                    node._pendingWsRequests.splice(i, 1);
+                    callback.callback();
+                }
             });
             socket.on('close',function() {
+                RED.log.debug("WS - closed connection ");
                 
                 node.isWsConnected = false;
 
@@ -536,7 +632,7 @@ module.exports = function(RED) {
 
                 if (!node.closing) {
                     clearTimeout(node.tout);
-                    node.tout = setTimeout(function() { startconn(onOpened); }, 3000); // try to reconnect every 3 secs... bit fast ?
+                    node.tout = setTimeout(function() { startconn(); }, 3000); // try to reconnect every 3 secs... bit fast ?
                 }
             });
             socket.on('message',function(data,flags) {
@@ -546,16 +642,18 @@ module.exports = function(RED) {
             });
             socket.on('error', function(err) {
             	RED.log.debug("WS - errored connection with " + err);
+
                 node.emit('erro');
                 node.isWsConnected = false;
                 if (!node.closing) {
                     clearTimeout(node.tout);
-                    node.tout = setTimeout(function() { startconn(onOpened); }, 3000); // try to reconnect every 3 secs... bit fast ?
+                    node.tout = setTimeout(function() { startconn(); }, 3000); // try to reconnect every 3 secs... bit fast ?
                 }
             });
         }
 
         node.on("close", function() {
+            RED.log.debug("WS - closing connection ");
      	    node.closing = true;
             node.server.close();
             if (node.tout) {
@@ -578,8 +676,9 @@ module.exports = function(RED) {
     }
 
     ThingsboardServerNode.prototype.handleEvent = function(id,/*socket*/socket,/*String*/event,/*Object*/data,/*Object*/flags) {
+        var dataParsed = JSON.parse(data);
         var msg = {
-            payload:JSON.parse(data)
+            payload:dataParsed
         };
         RED.log.debug("WSClient - HandleEvent for " + JSON.stringify(msg));
         msg._session = {type:"websocket",id:id};
@@ -587,12 +686,12 @@ module.exports = function(RED) {
     	// Add subscription device details to msg
     	if (msg.payload !== undefined && msg.payload.subscriptionId !== undefined)
     	{
-    		RED.log.debug("HandleEvent -  Subscriptions " + JSON.stringify(this._subscriptions));
     		var subs = this._subscriptions[msg.payload.subscriptionId];
     		if (subs !== undefined)
     		{
     			msg.deviceId = subs.entityId;
     		}
+            RED.log.debug("HandleEvent - For Subscriptions " + JSON.stringify(this._subscriptions) + "; MSG " + JSON.stringify(msg));
     	}
 
         for (var i = 0; i < this._inputNodes.length; i++) {
@@ -634,35 +733,69 @@ module.exports = function(RED) {
 			});
 
 	        // Register for messages now by device name and type
-	        this.serverConfig.getDeviceIdsByNamePattern(node.deviceNamePattern, deviceTypes, function(deviceIds) {
-        		var asset,scope;
-	        	var assets = [];
-	        	if (node.isListenToTelemetry)
-	        	{
-		        	scope = "LATEST_TELEMETRY";
-		        	asset = node.serverConfig.createAssetToListenWs(deviceIds[0], node.deviceType, scope);
+	        this.serverConfig.getDevicesByNamePattern(node.deviceNamePattern, deviceTypes, function(devices) {
+                // Now also check for assets
+                node.serverConfig.getAssetsByNamePattern(node.deviceNamePattern, deviceTypes, function(assets) {
+            
+                    RED.log.debug("InputNode - read devices " + JSON.stringify(devices) + "; assets " + JSON.stringify(assets));
 
-		        	assets[0] = asset;
-	        	}
-	        	if (node.isListenToAttributes)
-	        	{
-		        	scope = "LATEST_TELEMETRY";
-		        	asset = node.serverConfig.createAssetToListenWs(deviceIds[0], node.deviceType, scope);
+                    var asset,scope;
+                    var assetsParsed = [];
+                    var count = 0;
+                    for (var i = 0; i < devices.length; i++) {
+                        if (node.isListenToTelemetry)
+                        {
+                            scope = "LATEST_TELEMETRY";
+                            asset = node.serverConfig.createAssetToListenWs(devices[i].id, devices[i].entityType, scope);
 
-		        	assets[0] = asset;
-	        	}
+                            assetsParsed[count] = asset;
+                            count++;
+                        }
+                        if (node.isListenToAttributes)
+                        {
+                            scope = "LATEST_ATTRIBUTE";
+                            asset = node.serverConfig.createAssetToListenWs(devices[i].id, devices[i].entityType, scope);
 
-		        node.serverConfig.startListenWsForAssets(
-		        	assets, function(msg) {
-		        		RED.log.debug("LATEST_TELEMETRY received " + JSON.stringify(msg));
-		        	});
+                            assetsParsed[count] = asset;
+                            count++;
+                        }
+                    }
+                    for (var i = 0; i < assets.length; i++) {
+                        if (node.isListenToTelemetry)
+                        {
+                            scope = "LATEST_TELEMETRY";
+                            asset = node.serverConfig.createAssetToListenWs(assets[i].id, assets[i].entityType, scope);
 
-		        node.on('close', function() {
-		            if (node.serverConfig) {
-		                node.serverConfig.removeInputNode(node);
-		            }
-		            node.status({});
-		        });
+                            assetsParsed[count] = asset;
+                            count++;
+                        }
+                        if (node.isListenToAttributes)
+                        {
+                            scope = "LATEST_ATTRIBUTE";
+                            asset = node.serverConfig.createAssetToListenWs(assets[i].id, assets[i].entityType, scope);
+
+                            assetsParsed[count] = asset;
+                            count++;
+                        }
+                    }
+
+                    RED.log.debug("InputNode - Registering for updates for " + JSON.stringify(assetsParsed));
+
+                    if (assetsParsed.length > 0)
+                    {
+                        node.serverConfig.startListenWsForAssets(
+                            assetsParsed, function(msg) {
+                                RED.log.debug("LATEST_TELEMETRY received " + JSON.stringify(msg));
+                            });
+                    }
+
+                    node.on('close', function() {
+                        if (node.serverConfig) {
+                            node.serverConfig.removeInputNode(node);
+                        }
+                        node.status({});
+                    });
+                });
 	        });
     	}
     }
@@ -720,6 +853,8 @@ module.exports = function(RED) {
         	var sendPostData = function(deviceAccessToken, deviceId, msg) {
 		       	node.serverConfig.setAuthTokenHeader(msg);
 
+                RED.log.debug("POST result to device " + deviceId + "; MSG " + JSON.stringify(msg));
+
 		       	if (isTelemetryUpdate)
 		       	{
 			       	node.serverConfig.requestHttp(node.serverConfig.thingsboardHost + ":" + node.serverConfig.restPort + "/api/v1/" + deviceAccessToken + "/telemetry", "POST", msg, function(res) {
@@ -747,21 +882,23 @@ module.exports = function(RED) {
     		var subMsg = {};
 
     		var performAuthedRequest = function(deviceId) {
+                var deviceIdStore = deviceId;
+                RED.log.debug("Performing authed request for deviceId " + deviceIdStore);
     			if (node.deviceAccessToken[deviceId] === undefined)
     			{
 	        		node.serverConfig.setAuthTokenHeader(subMsg);
-					node.serverConfig.requestHttp(node.serverConfig.thingsboardHost + ":" + node.serverConfig.restPort + "/api/device/" + deviceId + "/credentials", "GET", subMsg, function(res) {
+					node.serverConfig.requestHttp(node.serverConfig.thingsboardHost + ":" + node.serverConfig.restPort + "/api/device/" + deviceIdStore + "/credentials", "GET", subMsg, function(res) {
 
 			        	RED.log.debug("Device accessToken result " + JSON.stringify(res));
-			        	node.deviceAccessToken[deviceId] = res.payload.credentialsId;
+			        	node.deviceAccessToken[deviceIdStore] = res.payload.credentialsId;
 
-			        	sendPostData(node.deviceAccessToken[deviceId], deviceId, msg);
+			        	sendPostData(node.deviceAccessToken[deviceIdStore], deviceIdStore, msg);
 		        	});
 
     			}
     			else
     			{
-    				sendPostData(node.deviceAccessToken[deviceId], deviceId, msg);
+    				sendPostData(node.deviceAccessToken[deviceIdStore], deviceIdStore, msg);
     			}
     		};
 
@@ -769,13 +906,31 @@ module.exports = function(RED) {
     		{
     			if (node.deviceNameIdMapping[node.deviceName] !== undefined)
     			{
+                    RED.log.debug("Found device name " + node.deviceName + " in dictionary " + JSON.stringify(node.deviceNameIdMapping));
     				performAuthedRequest(node.deviceNameIdMapping[node.deviceName]);
     			}
     			else
     			{
     				node.serverConfig.getDeviceIdByName(node.deviceName, node.deviceType, function(newDeviceId) {
-    					node.deviceNameIdMapping[node.deviceName] = newDeviceId;
-    					performAuthedRequest(newDeviceId);
+                        if (newDeviceId.length > 0)
+                        {
+                            node.deviceNameIdMapping[node.deviceName] = newDeviceId[0];
+                            performAuthedRequest(newDeviceId[0]);   
+                        }  
+                        else
+                        {    
+                            node.serverConfig.getAssetIdByName(node.deviceName, node.deviceType, function(newAssetId) {
+                                if (newAssetId.length > 0)
+                                {
+                                    node.deviceNameIdMapping[node.deviceName] = newAssetId[0];
+                                    performAuthedRequest(newAssetId[0]);
+                                }
+                                else
+                                {
+                                    RED.log.debug("Not sending anything, because no device found");
+                                }
+                            });   
+                        }
     				});
     			}
     		}
